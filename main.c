@@ -31,6 +31,10 @@ void cd_command(char *path, char *working_dir, char *home_dir) {
 }
 
 void parse_input(char *input, char *args[]) {
+    if (input[0] == '\0') {
+        args[0] = NULL;
+        return;
+    }
     int i = 0;
     char *ptr = strtok(input, " \t\n");
     while (ptr != NULL && i < MAX_ARGS - 1) {
@@ -53,17 +57,26 @@ void handle_command(char *input, char *working_dir, char *home_dir) {
     char *function_args[MAX_ARGS];
     remove_nl(input);
     parse_input(input, function_args);
+    char *command_name = function_args[0];
 
-    if (strcmp(function_args[0], "cd") == 0) {
+    if (command_name == NULL) {
+        return;
+    }
+    
+    if (strcmp(command_name, "exit") == 0) {
+        exit(0);
+    }
+
+    if (strcmp(command_name, "cd") == 0) {
         cd_command(function_args[1], working_dir, home_dir);
         return;
     }
 
     pid_t ps = fork();
     if (ps == 0) {
-        execvp(function_args[0], function_args);
-        perror("error");
-        exit(errno);
+        execvp(command_name, function_args);
+        perror(command_name);
+        exit(0);
     } else {
         wait(NULL);
     }
