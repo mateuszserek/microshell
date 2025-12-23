@@ -78,7 +78,7 @@ void remove_nl(char *str) {
     }
 }
 
-void handle_command(char *input) {
+void handle_input(char *input) {
     char *function_args[MAX_ARGS];
     save_input_into_history(input);
     remove_nl(input);
@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
     while(1) {
         printf("%s:%s$ ", user_name, working_directory);
         fgets(input, sizeof(input), stdin);
-        handle_command(input);
+        handle_input(input);
     }
     return 0;
 }
