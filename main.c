@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <signal.h>
 
 #define DIR_SIZE 4096
 #define INPUT_SIZE 256
@@ -17,6 +18,18 @@ char *history_file_directory;
 char working_directory[DIR_SIZE];
 char *home_directory;
 char *user_name;
+int interrupted = 0;
+pid_t child_process = -1;
+
+int kill();
+
+void handle_signal(int sig) {
+    interrupted = 1;
+    if (child_process > 0) {
+        kill(child_process, sig);
+    }
+    printf("\n");
+}
 
 void set_working_directory() {
     if(getcwd(working_directory, DIR_SIZE) == NULL) {
@@ -98,15 +111,17 @@ void handle_input(char *input) {
         return;
     }
 
-    pid_t ps = fork();
-    if (ps == 0) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        child_process = pid;
         if (execvp(command_name, function_args) == -1) {
-            perror(command_name);
+            printf("%s: Unknown command\n", command_name);
             exit(errno);
         }
+        child_process = -1;
         exit(0);
     } else {
-        wait(NULL);
+        wait(pid);
     }
 }
 
@@ -117,9 +132,17 @@ int main(int argc, char *argv[]) {
     set_working_directory();
     set_history_directory();
 
+
     while(1) {
+        signal(SIGINT, handle_signal);
+        signal(SIGQUIT, handle_signal);
+        signal(SIGTSTP, handle_signal);
         printf("%s:%s$ ", user_name, working_directory);
         fgets(input, sizeof(input), stdin);
+        if (interrupted == 1) {
+            interrupted = 0;
+            continue;
+        }
         handle_input(input);
     }
     return 0;
