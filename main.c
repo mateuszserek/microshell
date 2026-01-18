@@ -25,10 +25,10 @@ int kill();
 
 void handle_signal(int sig) {
     interrupted = 1;
+    signal(sig, handle_signal);
     if (child_process > 0) {
         kill(child_process, sig);
     }
-    printf("\n");
 }
 
 void set_working_directory() {
@@ -113,15 +113,15 @@ void handle_input(char *input) {
 
     pid_t pid = fork();
     if (pid == 0) {
-        child_process = pid;
         if (execvp(command_name, function_args) == -1) {
-            printf("%s: Unknown command\n", command_name);
+            printf("%s: command not found\n", command_name);
             exit(errno);
         }
-        child_process = -1;
         exit(0);
     } else {
-        wait(pid);
+        child_process = pid;
+        waitpid(pid, NULL, WUNTRACED);
+        child_process = -1;
     }
 }
 
@@ -131,16 +131,17 @@ int main(int argc, char *argv[]) {
     user_name = getenv("USER");
     set_working_directory();
     set_history_directory();
-
+    signal(SIGINT, handle_signal);
+    signal(SIGQUIT, handle_signal);
+    signal(SIGTSTP, handle_signal);
 
     while(1) {
-        signal(SIGINT, handle_signal);
-        signal(SIGQUIT, handle_signal);
-        signal(SIGTSTP, handle_signal);
         printf("%s:%s$ ", user_name, working_directory);
         fgets(input, sizeof(input), stdin);
+
         if (interrupted == 1) {
             interrupted = 0;
+            printf("\n");
             continue;
         }
         handle_input(input);
