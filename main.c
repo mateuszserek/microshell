@@ -18,17 +18,34 @@ char *history_file_directory;
 char working_directory[DIR_SIZE];
 char *home_directory;
 char *user_name;
-int interrupted = 0;
+int shell_signaled = 0;
 pid_t child_process = -1;
 
 int kill();
 
-void handle_signal(int sig) {
-    interrupted = 1;
-    signal(sig, handle_signal);
+void shell_signal_handler(int sig) {
+    shell_signaled = 1;
+    signal(sig, shell_signal_handler);
+    printf("\n");
+}
+
+void child_process_signal_handler(int sig) {
     if (child_process > 0) {
         kill(child_process, sig);
     }
+    printf("\n");
+}
+
+void set_shell_signals() {
+    signal(SIGINT, shell_signal_handler);
+    signal(SIGQUIT, shell_signal_handler);
+    signal(SIGTSTP, shell_signal_handler);
+}
+
+void turn_off_shell_signals() {
+    signal(SIGINT, SIG_IGN);
+    signal(SIGQUIT, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
 }
 
 void set_working_directory() {
@@ -56,7 +73,7 @@ void save_input_into_history(char *input) {
 
 void cd_command(char *path) {
     int cd_status;
-    if (path == NULL) {
+    if (path == NULL || strcmp(path, "~") == 1) {
         cd_status = chdir(home_directory);
     } else {
         cd_status = chdir(path);
@@ -92,6 +109,7 @@ void remove_nl(char *str) {
 }
 
 void handle_input(char *input) {
+    turn_off_shell_signals();
     char *function_args[MAX_ARGS];
     save_input_into_history(input);
     remove_nl(input);
@@ -113,6 +131,9 @@ void handle_input(char *input) {
 
     pid_t pid = fork();
     if (pid == 0) {
+            signal(SIGINT, child_process_signal_handler);
+            signal(SIGQUIT,child_process_signal_handler);
+            signal(SIGTSTP, child_process_signal_handler);
         if (execvp(command_name, function_args) == -1) {
             printf("%s: command not found\n", command_name);
             exit(errno);
@@ -120,7 +141,7 @@ void handle_input(char *input) {
         exit(0);
     } else {
         child_process = pid;
-        waitpid(pid, NULL, WUNTRACED);
+        wait(NULL);
         child_process = -1;
     }
 }
@@ -131,17 +152,13 @@ int main(int argc, char *argv[]) {
     user_name = getenv("USER");
     set_working_directory();
     set_history_directory();
-    signal(SIGINT, handle_signal);
-    signal(SIGQUIT, handle_signal);
-    signal(SIGTSTP, handle_signal);
 
     while(1) {
+        set_shell_signals();
         printf("%s:%s$ ", user_name, working_directory);
         fgets(input, sizeof(input), stdin);
-
-        if (interrupted == 1) {
-            interrupted = 0;
-            printf("\n");
+        if (shell_signaled) {
+            shell_signaled = 0;
             continue;
         }
         handle_input(input);
