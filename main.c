@@ -22,6 +22,10 @@ pid_t child_process = -1;
 
 int kill();
 
+int resume_process(pid_t pid) {
+    return kill(pid, SIGCONT);
+}
+
 void free_function_args(char *args[]) {
     int i;
     for (i = 0; i < MAX_ARGS; i++) {
@@ -31,6 +35,16 @@ void free_function_args(char *args[]) {
             return;
         }
     }
+}
+
+void wait_for_pid(pid_t pid, char* command_name) {
+    child_process = pid;
+    int status;
+    waitpid(pid, &status, WUNTRACED);
+    if (WIFSTOPPED(status)) {
+        printf("\nStopped: %s, pid: %d\n", command_name, pid);
+    }
+    child_process = -1;
 }
 
 void shell_signal_handler(int sig) {
@@ -66,7 +80,6 @@ void set_working_directory() {
         perror("Error while using getcwd()");
     }
 }
-
 
 void cd_command(char *path) {
     int cd_status;
@@ -117,6 +130,19 @@ void handle_input(char *input) {
         return;
     }
 
+    if (strcmp(command_name, "fg") == 0 && function_args[1] != NULL) {
+        int pid = atoi(function_args[1]);
+        if (pid == 0) {
+            printf("Invalid process id\n");
+        } else if(resume_process(pid) == 0) {
+            wait_for_pid(pid, command_name);
+        } else {
+            printf("Unable to resume process: pid %d\n", pid);
+        }
+        free_function_args(function_args);
+        return;
+    }
+
     if(strcmp(command_name, "help") == 0) {
         printf("%s\n", HELP_MESSAGE);
         free_function_args(function_args);
@@ -145,13 +171,7 @@ void handle_input(char *input) {
         }
         exit(0);
     } else {
-        int status;
-        child_process = pid;
-        waitpid(pid, &status, WUNTRACED);
-        if (WIFSTOPPED(status)) {
-            printf("\nStopped: %s\n", function_args[0]);
-            kill(pid, SIGKILL);
-        }
+        wait_for_pid(pid, command_name);
         free_function_args(function_args);
         child_process = -1;
     }
