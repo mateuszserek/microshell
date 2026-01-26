@@ -49,18 +49,7 @@ void wait_for_pid(pid_t pid, char* command_name) {
 
 void shell_signal_handler(int sig) {
     shell_signaled = 1;
-    signal(sig, shell_signal_handler);
     printf("\n");
-}
-
-void child_process_signal_handler(int sig) {
-    if (child_process == -1) {
-        return;
-    }
-    
-    if (sig == SIGQUIT || sig == SIGINT) {
-        kill(child_process, sig);
-    }
 }
 
 void set_shell_signals() {
@@ -130,14 +119,18 @@ void handle_input(char *input) {
         return;
     }
 
-    if (strcmp(command_name, "fg") == 0 && function_args[1] != NULL) {
-        int pid = atoi(function_args[1]);
-        if (pid == 0) {
-            printf("Invalid process id\n");
-        } else if(resume_process(pid) == 0) {
-            wait_for_pid(pid, command_name);
+    if (strcmp(command_name, "fg") == 0) {
+        if (function_args[1] == NULL) {
+            printf("fg: missing argument: PID\n");
         } else {
-            printf("Unable to resume process: pid %d\n", pid);
+            int pid = atoi(function_args[1]);
+            if (pid == 0) {
+                printf("Invalid process id\n");
+            } else if(resume_process(pid) == 0) {
+                wait_for_pid(pid, command_name);
+            } else {
+                printf("Unable to resume process: pid %d\n", pid);
+            }
         }
         free_function_args(function_args);
         return;
@@ -162,9 +155,9 @@ void handle_input(char *input) {
 
     pid_t pid = fork();
     if (pid == 0) {
-            signal(SIGINT, child_process_signal_handler);
-            signal(SIGQUIT,child_process_signal_handler);
-            signal(SIGTSTP, child_process_signal_handler);
+            signal(SIGINT, SIG_DFL);
+            signal(SIGQUIT, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
         if (execvp(command_name, function_args) == -1) {
             printf("%s: command not found\n", command_name);
             exit(errno);
@@ -177,7 +170,9 @@ void handle_input(char *input) {
     }
 }
 
-int main(int argc, char *argv[]) {
+
+
+int main() {
     char input[INPUT_SIZE];
     home_directory = getenv("HOME");
     user_name = getenv("USER");
