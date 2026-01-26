@@ -12,7 +12,7 @@
 #define DIR_SIZE 4096
 #define INPUT_SIZE 256
 #define MAX_ARGS 16
-#define HELP_MESSAGE "Microshell by Mateusz Serek\n exit - exit shell\n cd - change path\n build-in bash commands with execvp"
+#define HELP_MESSAGE "Microshell by \033[34m Mateusz Serek \033[0m \n exit - exit shell\n cd - change path\n built-in bash commands with execvp"
 #define RED "\033[31m"
 #define GREEN "\033[32m"
 #define RESET "\033[0m"
