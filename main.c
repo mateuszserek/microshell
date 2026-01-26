@@ -12,9 +12,8 @@
 #define DIR_SIZE 4096
 #define INPUT_SIZE 256
 #define MAX_ARGS 16
-#define HISTORY_FILE_NAME "history.txt"
+#define HELP_MESSAGE "help message 123"
 
-char *history_file_directory;
 char working_directory[DIR_SIZE];
 char *home_directory;
 char *user_name;
@@ -23,6 +22,17 @@ pid_t child_process = -1;
 
 int kill();
 
+void free_function_args(char *args[]) {
+    int i;
+    for (i = 0; i < MAX_ARGS; i++) {
+        if (args[i] != NULL) {
+            free(args[i]);
+        } else {
+            return;
+        }
+    }
+}
+
 void shell_signal_handler(int sig) {
     shell_signaled = 1;
     signal(sig, shell_signal_handler);
@@ -30,10 +40,13 @@ void shell_signal_handler(int sig) {
 }
 
 void child_process_signal_handler(int sig) {
-    if (child_process > 0) {
+    if (child_process == -1) {
+        return;
+    }
+    
+    if (sig == SIGQUIT || sig == SIGINT) {
         kill(child_process, sig);
     }
-    printf("\n");
 }
 
 void set_shell_signals() {
@@ -54,26 +67,10 @@ void set_working_directory() {
     }
 }
 
-void set_history_directory() {
-    history_file_directory = malloc(strlen(working_directory) + strlen(HISTORY_FILE_NAME) + 2);
-    strcat(history_file_directory, working_directory);
-    strcat(history_file_directory, "/");
-    strcat(history_file_directory, HISTORY_FILE_NAME);
-    creat(history_file_directory, 0644);
-}
-
-void save_input_into_history(char *input) {
-    if (strcmp(input, "\n") == 0) {
-        return;
-    }
-    int history_file_directory_fd = open(history_file_directory, O_WRONLY | O_APPEND);
-    write(history_file_directory_fd, input, strlen(input));
-    close(history_file_directory_fd);
-}
 
 void cd_command(char *path) {
     int cd_status;
-    if (path == NULL || strcmp(path, "~") == 1) {
+    if (path == NULL || strcmp(path, "~") == 0) {
         cd_status = chdir(home_directory);
     } else {
         cd_status = chdir(path);
@@ -111,21 +108,29 @@ void remove_nl(char *str) {
 void handle_input(char *input) {
     turn_off_shell_signals();
     char *function_args[MAX_ARGS];
-    save_input_into_history(input);
     remove_nl(input);
     parse_input(input, function_args);
     char *command_name = function_args[0];
 
     if (command_name == NULL) {
+        free_function_args(function_args);
+        return;
+    }
+
+    if(strcmp(command_name, "help") == 0) {
+        printf("%s\n", HELP_MESSAGE);
+        free_function_args(function_args);
         return;
     }
     
     if (strcmp(command_name, "exit") == 0) {
+        free_function_args(function_args);
         exit(0);
     }
 
     if (strcmp(command_name, "cd") == 0) {
         cd_command(function_args[1]);
+        free_function_args(function_args);
         return;
     }
 
@@ -140,8 +145,14 @@ void handle_input(char *input) {
         }
         exit(0);
     } else {
+        int status;
         child_process = pid;
-        wait(NULL);
+        waitpid(pid, &status, WUNTRACED);
+        if (WIFSTOPPED(status)) {
+            printf("\nStopped: %s\n", function_args[0]);
+            kill(pid, SIGKILL);
+        }
+        free_function_args(function_args);
         child_process = -1;
     }
 }
@@ -151,7 +162,6 @@ int main(int argc, char *argv[]) {
     home_directory = getenv("HOME");
     user_name = getenv("USER");
     set_working_directory();
-    set_history_directory();
 
     while(1) {
         set_shell_signals();
