@@ -12,7 +12,11 @@
 #define DIR_SIZE 4096
 #define INPUT_SIZE 256
 #define MAX_ARGS 16
-#define HELP_MESSAGE "help message 123"
+#define HELP_MESSAGE "Microshell by Mateusz Serek\n exit - exit shell\n cd - change path\n build-in bash commands with execvp"
+#define RED "\033[31m"
+#define GREEN "\033[32m"
+#define RESET "\033[0m"
+#define BLUE "\033[34m"
 
 char working_directory[DIR_SIZE];
 char *home_directory;
@@ -21,6 +25,7 @@ int shell_signaled = 0;
 pid_t child_process = -1;
 
 int kill();
+void snprintf();
 
 int resume_process(pid_t pid) {
     return kill(pid, SIGCONT);
@@ -35,16 +40,6 @@ void free_function_args(char *args[]) {
             return;
         }
     }
-}
-
-void wait_for_pid(pid_t pid, char* command_name) {
-    child_process = pid;
-    int status;
-    waitpid(pid, &status, WUNTRACED);
-    if (WIFSTOPPED(status)) {
-        printf("\nStopped: %s, pid: %d\n", command_name, pid);
-    }
-    child_process = -1;
 }
 
 void shell_signal_handler(int sig) {
@@ -66,7 +61,7 @@ void turn_off_shell_signals() {
 
 void set_working_directory() {
     if(getcwd(working_directory, DIR_SIZE) == NULL) {
-        perror("Error while using getcwd()");
+        perror(RED "Error while using getcwd()" RESET);
     }
 }
 
@@ -74,12 +69,16 @@ void cd_command(char *path) {
     int cd_status;
     if (path == NULL || strcmp(path, "~") == 0) {
         cd_status = chdir(home_directory);
+    } else if (path[0] == '~') {
+        char new_dir[DIR_SIZE];
+        snprintf(new_dir, sizeof(new_dir), "%s%s", home_directory, path + 1);
+        cd_status = chdir(new_dir);
     } else {
         cd_status = chdir(path);
     }
 
     if(cd_status != 0) {
-        perror("Couldn't change directory");
+        perror(RED "Unable to change directory" RESET);
     }
     set_working_directory();
 }
@@ -119,23 +118,6 @@ void handle_input(char *input) {
         return;
     }
 
-    if (strcmp(command_name, "fg") == 0) {
-        if (function_args[1] == NULL) {
-            printf("fg: missing argument: PID\n");
-        } else {
-            int pid = atoi(function_args[1]);
-            if (pid == 0) {
-                printf("Invalid process id\n");
-            } else if(resume_process(pid) == 0) {
-                wait_for_pid(pid, command_name);
-            } else {
-                printf("Unable to resume process: pid %d\n", pid);
-            }
-        }
-        free_function_args(function_args);
-        return;
-    }
-
     if(strcmp(command_name, "help") == 0) {
         printf("%s\n", HELP_MESSAGE);
         free_function_args(function_args);
@@ -157,20 +139,20 @@ void handle_input(char *input) {
     if (pid == 0) {
             signal(SIGINT, SIG_DFL);
             signal(SIGQUIT, SIG_DFL);
-            signal(SIGTSTP, SIG_DFL);
+            signal(SIGTSTP, SIG_IGN);
         if (execvp(command_name, function_args) == -1) {
-            printf("%s: command not found\n", command_name);
+            printf(RED "%s: command not found\n" RESET, command_name);
             exit(errno);
         }
         exit(0);
     } else {
-        wait_for_pid(pid, command_name);
+        child_process = pid;
+        wait(NULL);
+        child_process = -1;
         free_function_args(function_args);
         child_process = -1;
     }
 }
-
-
 
 int main() {
     char input[INPUT_SIZE];
@@ -180,8 +162,13 @@ int main() {
 
     while(1) {
         set_shell_signals();
-        printf("%s:%s$ ", user_name, working_directory);
-        fgets(input, sizeof(input), stdin);
+        printf(GREEN "%s:" RESET, user_name);
+        printf(BLUE "%s $ " RESET, working_directory);
+        if (fgets(input, sizeof(input), stdin) == NULL && shell_signaled == 0) {
+            printf("Bye!\n");
+            exit(0);
+        }
+
         if (shell_signaled) {
             shell_signaled = 0;
             continue;
